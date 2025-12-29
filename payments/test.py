@@ -21,11 +21,25 @@ async def get_available_currencies():
     """Get list of available cryptocurrencies."""
     print("\n🔍 Testing: Get available currencies...")
     
+    # DEBUG INFO
+    print(f"\n🐛 DEBUG INFO:")
+    print(f"API Key: {NOWPAYMENTS_API_KEY[:10] if NOWPAYMENTS_API_KEY else 'NOT SET'}...{NOWPAYMENTS_API_KEY[-4:] if NOWPAYMENTS_API_KEY else ''}")
+    print(f"API Key Length: {len(NOWPAYMENTS_API_KEY) if NOWPAYMENTS_API_KEY else 0}")
+    print(f"API Base URL: {NOWPAYMENTS_API_BASE}")
+    print(f"Full URL: {NOWPAYMENTS_API_BASE}/currencies")
+    
     async with httpx.AsyncClient(timeout=30.0) as client:
+        headers = {"x-api-key": NOWPAYMENTS_API_KEY}
+        print(f"Headers: {headers}")
+        
         response = await client.get(
             f"{NOWPAYMENTS_API_BASE}/currencies",
-            headers={"x-api-key": NOWPAYMENTS_API_KEY}
+            headers=headers
         )
+        
+        print(f"\n📡 Response Status: {response.status_code}")
+        print(f"📡 Response Headers: {response.headers}")
+        print(f"📡 Response Body: {response.text[:500]}")
         
         if response.status_code == 200:
             currencies = response.json()
