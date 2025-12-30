@@ -23,7 +23,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # ========== FEATURE FLAGS ==========
-ENABLE_QUOTA_SYSTEM = False  # Set to True for production with paid credits
+ENABLE_QUOTA_SYSTEM = True  # Set to True for production with paid credits
 FREE_GENERATIONS_PER_DAY = 2  # Only applies if ENABLE_QUOTA_SYSTEM is True
 
 # ========== CONFIGURATION ==========
@@ -50,7 +50,7 @@ PAYMENT_PACKAGES = [
 # Generation settings
 POLL_INTERVAL = 3  # seconds
 MAX_POLL_TIME = 300  # 5 minutes max wait
-MAX_CONCURRENT_GENERATIONS = 1  # Limit per-user concurrent generations
+MAX_CONCURRENT_GENERATIONS = 3  # Limit per-user concurrent generations
 
 # Database
 DB = "users.db"
