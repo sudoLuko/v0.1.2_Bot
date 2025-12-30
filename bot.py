@@ -588,7 +588,7 @@ async def generate_and_send(chat_id, prompt, generation_id):
         # Notify start
         await send_message(
             chat_id=chat_id,
-            text="🎨 Generating your image...\n⏱️ This may take 20 seconds to 2 minutes"
+            text="🎨 Generating your image...\n⏱️ Most take 20-30 seconds; some may take up to 5 minutes"
         )
         
         # Load and prepare workflow
@@ -1319,7 +1319,7 @@ async def webhook(req: Request):
                 generation_id = await log_generation(chat_id, prompt, status="queued")
                 
                 # Send confirmation
-                confirm_text = f"✅ Generation queued!\n\n{status_msg}\n\nYour image will be ready in ~30-60 seconds..."
+                confirm_text = f"✅ Generation queued!\n\n{status_msg}\n\nMost images are ready in 20-30 seconds; some may take up to 5 minutes..."
                 await send_message(chat_id=chat_id, text=confirm_text)
                 
                 # Start generation in background (non-blocking)
