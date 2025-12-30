@@ -23,7 +23,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # ========== FEATURE FLAGS ==========
-ENABLE_QUOTA_SYSTEM = True  # Set to True for production with paid credits
+ENABLE_QUOTA_SYSTEM = False  # Set to True for production with paid credits
 FREE_GENERATIONS_PER_DAY = 2  # Only applies if ENABLE_QUOTA_SYSTEM is True
 
 # ========== CONFIGURATION ==========
@@ -41,11 +41,10 @@ WEBHOOK_BASE_URL = os.getenv("WEBHOOK_BASE_URL", "https://svthbzs7s6ioem-8000.pr
 
 # Payment Packages
 PAYMENT_PACKAGES = [
-    {"id": 1, "credits": 5, "price": 3, "label": "5 credits - $3"},
-    {"id": 2, "credits": 10, "price": 6, "label": "10 credits - $6 ⭐ POPULAR"},
-    {"id": 3, "credits": 15, "price": 8, "label": "15 credits - $8 💎 BEST VALUE"},
-    {"id": 4, "credits": 20, "price": 10, "label": "20 credits - $10"},
-    {"id": 5, "credits": 100, "price": 35, "label": "100 credits - $35"},
+    {"id": 1, "credits": 10, "price": 10, "label": "10 credits - $10"},
+    {"id": 2, "credits": 25, "price": 20, "label": "25 credits - $20 ⭐ POPULAR"},
+    {"id": 3, "credits": 50, "price": 35, "label": "50 credits - $35 💎 BEST VALUE"},
+    {"id": 4, "credits": 100, "price": 60, "label": "100 credits - $60"},
 ]
 
 # Generation settings
@@ -396,7 +395,7 @@ async def create_plisio_invoice(user_id, amount_usd, credits, order_number):
             "order_number": order_number,
             "description": f"Purchase {credits} AI image generation credits",
             "callback_url": callback_url,
-            "allowed_psys_cids": "USDT_TRX,DOGE,BTC,LTC",
+            "allowed_psys_cids": "DOGE",  # Lowest fees, widely available
             "email": f"user{user_id}@bot.telegram",
             "plugin": "TelegramBot",
             "version": "1.0",
@@ -1139,12 +1138,15 @@ async def webhook(req: Request):
                 text=(
                     "💳 **Purchase Credits**\n\n"
                     "Select a package below:\n\n"
-                    "Payment accepted in:\n"
-                    "• USDT (TRC-20) - Recommended\n"
-                    "• Dogecoin - Best for small amounts\n"
-                    "• Bitcoin\n"
-                    "• Litecoin\n\n"
-                    "Secure crypto payments via Plisio"
+                    "🐕 **Payment Method: Dogecoin (DOGE)**\n"
+                    "• Transaction fee: ~$0.10\n"
+                    "• Fast confirmation (1 min)\n"
+                    "• Available on Coinbase, Robinhood, Binance\n\n"
+                    "Don't have DOGE? Buy instantly on:\n"
+                    "• Coinbase.com\n"
+                    "• Robinhood.com\n"
+                    "• Binance.com\n\n"
+                    "Secure payments via Plisio 🔒"
                 ),
                 parse_mode="Markdown",
                 reply_markup=keyboard
