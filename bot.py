@@ -41,16 +41,17 @@ WEBHOOK_BASE_URL = os.getenv("WEBHOOK_BASE_URL", "https://svthbzs7s6ioem-8000.pr
 
 # Payment Packages
 PAYMENT_PACKAGES = [
-    {"id": 1, "credits": 10, "price": 10, "label": "10 credits - $10"},
-    {"id": 2, "credits": 25, "price": 20, "label": "25 credits - $20 ⭐ POPULAR"},
-    {"id": 3, "credits": 50, "price": 35, "label": "50 credits - $35 💎 BEST VALUE"},
-    {"id": 4, "credits": 100, "price": 60, "label": "100 credits - $60"},
+    {"id": 1, "credits": 5, "price": 3, "label": "5 credits - $3"},
+    {"id": 2, "credits": 10, "price": 6, "label": "10 credits - $6 ⭐ POPULAR"},
+    {"id": 3, "credits": 15, "price": 8, "label": "15 credits - $8 💎 BEST VALUE"},
+    {"id": 4, "credits": 20, "price": 10, "label": "20 credits - $10"},
+    {"id": 5, "credits": 100, "price": 35, "label": "100 credits - $35"},
 ]
 
 # Generation settings
 POLL_INTERVAL = 3  # seconds
 MAX_POLL_TIME = 300  # 5 minutes max wait
-MAX_CONCURRENT_GENERATIONS = 3  # Limit per-user concurrent generations
+MAX_CONCURRENT_GENERATIONS = 1  # Limit per-user concurrent generations
 
 # Database
 DB = "users.db"
@@ -398,7 +399,7 @@ async def create_plisio_invoice(user_id, amount_usd, credits, order_number):
             "callback_url": callback_url,
             "success_url": success_url,
             "fail_url": success_url,  # Same page, just says "return to bot"
-            "allowed_psys_cids": "BTC,DOGE",  # BTC = universal, DOGE = cheap for advanced users
+            "allowed_psys_cids": "DOGE",  # DOGE only - cheapest fees
             "email": f"user{user_id}@bot.telegram",
             "plugin": "TelegramBot",
             "version": "1.0",
@@ -1218,14 +1219,18 @@ async def webhook(req: Request):
                 text=(
                     "💳 **Purchase Credits**\n\n"
                     "Select a package below:\n\n"
-                    "**Payment Options:**\n"
-                    "₿ **Bitcoin (BTC)** - Recommended\n"
-                    "   • Fee: ~$3 | Time: 10-30 min\n"
-                    "   • Works everywhere (Coinbase, Cash App)\n\n"
-                    "🐕 **Dogecoin (DOGE)** - Cheapest\n"
-                    "   • Fee: ~$0.10 | Time: 2-6 min\n"
-                    "   • ⚠️ Use Coinbase.com, NOT Coinbase Wallet\n\n"
-                    "Secure payments via Plisio 🔒"
+                    "🐕 **Payment Method: Dogecoin (DOGE)**\n"
+                    "• Transaction fee: ~$0.10\n"
+                    "• Confirmation time: 2-6 minutes\n\n"
+                    "**⚠️ IMPORTANT - Use Native DOGE Network:**\n"
+                    "✅ Select \"Dogecoin\" or \"DOGE Network\"\n"
+                    "❌ NOT Base Network\n"
+                    "❌ NOT any Layer 2 / ETH network\n\n"
+                    "**Recommended Wallets:**\n"
+                    "• Coinbase.com (main app, NOT Wallet)\n"
+                    "• Trust Wallet\n"
+                    "• Exodus\n\n"
+                    "Don't have DOGE? Buy on Coinbase/Robinhood 🚀"
                 ),
                 parse_mode="Markdown",
                 reply_markup=keyboard
