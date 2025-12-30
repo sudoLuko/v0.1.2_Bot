@@ -24,7 +24,7 @@ load_dotenv()
 
 # ========== FEATURE FLAGS ==========
 ENABLE_QUOTA_SYSTEM = True  # Quota system enabled - users need credits to generate
-FREE_GENERATIONS_PER_DAY = 2  # Only applies if ENABLE_QUOTA_SYSTEM is True
+FREE_GENERATIONS_PER_DAY = 3  # Only applies if ENABLE_QUOTA_SYSTEM is True
 
 # ========== CONFIGURATION ==========
 TOKEN = os.getenv("TELEGRAM_KEY")
@@ -50,7 +50,7 @@ PAYMENT_PACKAGES = [
 
 # Generation settings
 POLL_INTERVAL = 3  # seconds
-MAX_POLL_TIME = 300  # 5 minutes max wait
+MAX_POLL_TIME = 420  # 7 minutes max wait
 MAX_CONCURRENT_GENERATIONS = 1  # Limit per-user concurrent generations
 
 # Database
@@ -588,7 +588,7 @@ async def generate_and_send(chat_id, prompt, generation_id):
         # Notify start
         await send_message(
             chat_id=chat_id,
-            text="🎨 Generating your image...\n⏱️ This takes ~30-60 seconds"
+            text="🎨 Generating your image...\n⏱️ This may take 20 seconds to 2 minutes"
         )
         
         # Load and prepare workflow
@@ -1103,10 +1103,7 @@ async def webhook(req: Request):
                             f"Package: **{package['credits']} credits**\n"
                             f"Price: **${package['price']} USD**\n\n"
                             f"Payment options:\n"
-                            f"• USDT (TRC-20) - Low fees ~$1\n"
-                            f"• Dogecoin - Very low fees\n"
-                            f"• Bitcoin\n"
-                            f"• Litecoin\n\n"
+                            f"• Dogecoin - Very low fees\n\n"
                             f"👉 [Click here to pay]({invoice['invoice_url']})\n\n"
                             f"⏰ Invoice expires in 60 minutes\n"
                             f"🔔 You'll be notified when payment is received"
@@ -1223,14 +1220,15 @@ async def webhook(req: Request):
                     "• Transaction fee: ~$0.10\n"
                     "• Confirmation time: 2-6 minutes\n\n"
                     "**📱 How to Pay:**\n"
-                    "1. Scan QR code with your wallet app\n"
-                    "2. Confirm the pre-filled payment\n"
-                    "3. Send - done!\n\n"
-                    "**✅ Recommended Wallets:**\n"
-                    "• Coinbase (main app)\n"
+                    "1. Scan QR code with your wallet\n"
+                    "2. Wallet fills in address automatically\n"
+                    "3. Enter the DOGE amount shown\n"
+                    "4. Send payment\n\n"
+                    "**Best Wallets:**\n"
+                    "• Coinbase exchange\n"
                     "• Trust Wallet\n"
                     "• Exodus\n\n"
-                    "⚡ Credits added automatically after payment"
+                    "⚡ Credits added in 2-6 minutes"
                 ),
                 parse_mode="Markdown",
                 reply_markup=keyboard
