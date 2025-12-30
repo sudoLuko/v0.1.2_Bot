@@ -23,7 +23,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # ========== FEATURE FLAGS ==========
-ENABLE_QUOTA_SYSTEM = True  # Set to True for production with paid credits
+ENABLE_QUOTA_SYSTEM = True  # Quota system enabled - users need credits to generate
 FREE_GENERATIONS_PER_DAY = 2  # Only applies if ENABLE_QUOTA_SYSTEM is True
 
 # ========== CONFIGURATION ==========
@@ -1220,17 +1220,17 @@ async def webhook(req: Request):
                     "💳 **Purchase Credits**\n\n"
                     "Select a package below:\n\n"
                     "🐕 **Payment Method: Dogecoin (DOGE)**\n"
-                    "• Transaction fee: ~$0.10\n"
-                    "• Confirmation time: 2-6 minutes\n\n"
-                    "**⚠️ IMPORTANT - Use Native DOGE Network:**\n"
-                    "✅ Select \"Dogecoin\" or \"DOGE Network\"\n"
-                    "❌ NOT Base Network\n"
-                    "❌ NOT any Layer 2 / ETH network\n\n"
-                    "**Recommended Wallets:**\n"
-                    "• Coinbase.com (main app, NOT Wallet)\n"
-                    "• Trust Wallet\n"
-                    "• Exodus\n\n"
-                    "Don't have DOGE? Buy on Coinbase/Robinhood 🚀"
+                    "• Fee: ~$0.10 | Time: 2-6 min\n\n"
+                    "**📱 How to Pay:**\n"
+                    "1. Click package → Opens payment page\n"
+                    "2. **Copy the DOGE address** (don't scan QR)\n"
+                    "3. Open Trust Wallet or Exodus\n"
+                    "4. Send DOGE → **Paste address**\n"
+                    "5. **Copy the exact amount** shown\n"
+                    "6. Send payment\n\n"
+                    "⚠️ QR codes don't work - must copy/paste\n\n"
+                    "**✅ Works:** Trust Wallet, Exodus, Robinhood\n"
+                    "**❌ Broken:** Coinbase mobile, MetaMask, ETH wallets"
                 ),
                 parse_mode="Markdown",
                 reply_markup=keyboard
