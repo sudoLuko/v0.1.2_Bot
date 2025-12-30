@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 """
-Bulletproof Telegram Bot for AI Image Generation with Crypto Payments
-Fixed connection pool issues and simplified architecture
+Complete Telegram Bot for AI Image Generation with Plisio Crypto Payments
 """
 
 import os
@@ -12,12 +11,11 @@ import time
 import json
 import base64
 import secrets
-import random
 import hmac
 import hashlib
 import httpx
 from pathlib import Path
-from fastapi import FastAPI, Request, Header
+from fastapi import FastAPI, Request
 from io import BytesIO
 from dotenv import load_dotenv
 
@@ -25,7 +23,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # ========== FEATURE FLAGS ==========
-ENABLE_QUOTA_SYSTEM = True  # Set to False for unlimited testing
+ENABLE_QUOTA_SYSTEM = False  # Set to True for production with paid credits
 FREE_GENERATIONS_PER_DAY = 2  # Only applies if ENABLE_QUOTA_SYSTEM is True
 
 # ========== CONFIGURATION ==========
@@ -37,25 +35,22 @@ ENDPOINT_ID = os.getenv("RUNPOD_ENDPOINT_ID")
 API_KEY = os.getenv("RUNPOD_API_KEY")
 WORKFLOW_PATH = os.getenv("WORKFLOW_PATH")
 
-# NOWPayments Configuration
-NOWPAYMENTS_API_KEY = os.getenv("NOWPAYMENTS_API_KEY")
-NOWPAYMENTS_IPN_SECRET = os.getenv("NOWPAYMENTS_IPN_SECRET")
-NOWPAYMENTS_API_BASE = "https://api.nowpayments.io/v1"
-WEBHOOK_BASE_URL = os.getenv("WEBHOOK_URL", "").replace("/webhook", "")  # Remove /webhook if present
+# Plisio Configuration
+PLISIO_API_KEY = os.getenv("PLISIO_API_KEY")
+WEBHOOK_BASE_URL = os.getenv("WEBHOOK_BASE_URL", "https://svthbzs7s6ioem-8000.proxy.runpod.net")
 
-# Payment Packages (price in USD, credits given)
+# Payment Packages
 PAYMENT_PACKAGES = [
-    {"credits": 5, "price": 3, "label": "5 credits - $3"},
-    {"credits": 10, "price": 6, "label": "10 credits - $6", "badge": "⭐ POPULAR"},
-    {"credits": 15, "price": 8, "label": "15 credits - $8", "badge": "💎 BEST VALUE"},
-    {"credits": 20, "price": 10, "label": "20 credits - $10"},
-    {"credits": 100, "price": 35, "label": "100 credits - $35"},
+    {"id": 1, "credits": 10, "price": 10, "label": "10 credits - $10"},
+    {"id": 2, "credits": 25, "price": 20, "label": "25 credits - $20 ⭐ POPULAR"},
+    {"id": 3, "credits": 50, "price": 35, "label": "50 credits - $35 💎 BEST VALUE"},
+    {"id": 4, "credits": 100, "price": 60, "label": "100 credits - $60"},
 ]
 
 # Generation settings
 POLL_INTERVAL = 3  # seconds
 MAX_POLL_TIME = 300  # 5 minutes max wait
-MAX_CONCURRENT_GENERATIONS = 1  # Limit concurrent generations
+MAX_CONCURRENT_GENERATIONS = 1  # Limit per-user concurrent generations
 
 # Database
 DB = "users.db"
@@ -63,7 +58,7 @@ DB = "users.db"
 # FastAPI app
 app = FastAPI()
 
-# Track active generations to prevent overwhelming the system
+# Track active generations
 active_generations = set()
 db_write_lock = asyncio.Lock()
 
@@ -76,7 +71,7 @@ def print_status(emoji, message):
 
 # ========== TELEGRAM FUNCTIONS ==========
 
-async def send_message(chat_id, text, parse_mode=None):
+async def send_message(chat_id, text, parse_mode=None, reply_markup=None):
     """Send message to Telegram user using httpx."""
     try:
         data = {
@@ -85,6 +80,8 @@ async def send_message(chat_id, text, parse_mode=None):
         }
         if parse_mode:
             data["parse_mode"] = parse_mode
+        if reply_markup:
+            data["reply_markup"] = json.dumps(reply_markup)
         
         async with httpx.AsyncClient(timeout=30.0) as client:
             response = await client.post(
@@ -119,6 +116,28 @@ async def send_photo(chat_id, photo_bytes, caption=None):
             return response.json()
     except Exception as e:
         print_status("❌", f"Failed to send photo: {e}")
+        return None
+
+async def answer_callback_query(callback_query_id, text=None, show_alert=False):
+    """Answer callback query from inline buttons."""
+    try:
+        data = {
+            "callback_query_id": callback_query_id
+        }
+        if text:
+            data["text"] = text
+        if show_alert:
+            data["show_alert"] = show_alert
+        
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            response = await client.post(
+                f"{TELEGRAM_API_BASE}/answerCallbackQuery",
+                json=data
+            )
+            response.raise_for_status()
+            return response.json()
+    except Exception as e:
+        print_status("❌", f"Failed to answer callback: {e}")
         return None
 
 # ========== DATABASE FUNCTIONS ==========
@@ -161,17 +180,18 @@ def init_db():
         )
     """)
     
-    # Add transactions table for payment tracking
     cur.execute("""
         CREATE TABLE IF NOT EXISTS transactions (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            user_id INTEGER,
-            order_id TEXT UNIQUE,
-            payment_id TEXT,
+            user_id INTEGER NOT NULL,
+            order_id TEXT UNIQUE NOT NULL,
+            txn_id TEXT,
             amount_usd REAL,
             credits INTEGER,
             status TEXT,
             payment_status TEXT,
+            payment_currency TEXT,
+            payment_amount TEXT,
             created_at TEXT DEFAULT CURRENT_TIMESTAMP,
             completed_at TEXT,
             FOREIGN KEY (user_id) REFERENCES users(user_id)
@@ -241,19 +261,6 @@ async def update_user(user_id, credits=None, free_used=None, increment_generated
         conn.commit()
         conn.close()
 
-async def add_credits(user_id, credits):
-    """Add credits to user account."""
-    async with db_write_lock:
-        conn = db_connect()
-        cur = conn.cursor()
-        cur.execute(
-            "UPDATE users SET credits = credits + ? WHERE user_id = ?",
-            (credits, user_id)
-        )
-        conn.commit()
-        conn.close()
-        print_status("💰", f"Added {credits} credits to user {user_id}")
-
 async def log_generation(user_id, prompt, job_id=None, status="pending"):
     """Log generation request to database."""
     async with db_write_lock:
@@ -300,21 +307,24 @@ async def update_generation(generation_id, status=None, job_id=None, error_messa
         
         conn.close()
 
-async def log_transaction(user_id, order_id, amount_usd, credits, status="pending"):
-    """Log payment transaction to database."""
+async def log_transaction(user_id, order_id, amount_usd, credits, txn_id=None):
+    """Log payment transaction."""
     async with db_write_lock:
         conn = db_connect()
         cur = conn.cursor()
         cur.execute(
-            "INSERT INTO transactions (user_id, order_id, amount_usd, credits, status) VALUES (?, ?, ?, ?, ?)",
-            (user_id, order_id, amount_usd, credits, status)
+            """INSERT INTO transactions 
+            (user_id, order_id, txn_id, amount_usd, credits, status, payment_status) 
+            VALUES (?, ?, ?, ?, ?, ?, ?)""",
+            (user_id, order_id, txn_id, amount_usd, credits, "pending", "new")
         )
         transaction_id = cur.lastrowid
         conn.commit()
         conn.close()
         return transaction_id
 
-async def update_transaction(order_id, payment_id=None, payment_status=None, status=None, completed=False):
+async def update_transaction(order_id, status=None, payment_status=None, 
+                            payment_currency=None, payment_amount=None, completed=False):
     """Update transaction status."""
     async with db_write_lock:
         conn = db_connect()
@@ -323,17 +333,21 @@ async def update_transaction(order_id, payment_id=None, payment_status=None, sta
         updates = []
         params = []
         
-        if payment_id:
-            updates.append("payment_id = ?")
-            params.append(payment_id)
+        if status:
+            updates.append("status = ?")
+            params.append(status)
         
         if payment_status:
             updates.append("payment_status = ?")
             params.append(payment_status)
         
-        if status:
-            updates.append("status = ?")
-            params.append(status)
+        if payment_currency:
+            updates.append("payment_currency = ?")
+            params.append(payment_currency)
+        
+        if payment_amount:
+            updates.append("payment_amount = ?")
+            params.append(payment_amount)
         
         if completed:
             updates.append("completed_at = CURRENT_TIMESTAMP")
@@ -346,85 +360,140 @@ async def update_transaction(order_id, payment_id=None, payment_status=None, sta
         
         conn.close()
 
-async def get_transaction_by_order_id(order_id):
+async def get_transaction(order_id):
     """Get transaction by order ID."""
     async with db_write_lock:
         conn = db_connect()
         cur = conn.cursor()
         cur.execute(
-            "SELECT user_id, credits, status FROM transactions WHERE order_id = ?",
+            "SELECT user_id, credits, amount_usd, status FROM transactions WHERE order_id=?",
             (order_id,)
         )
         row = cur.fetchone()
         conn.close()
         
         if row:
-            return {"user_id": row[0], "credits": row[1], "status": row[2]}
+            return {
+                "user_id": row[0],
+                "credits": row[1],
+                "amount_usd": row[2],
+                "status": row[3]
+            }
         return None
 
-# ========== NOWPAYMENTS FUNCTIONS ==========
+# ========== PLISIO FUNCTIONS ==========
 
-async def create_payment_invoice(user_id, package):
-    """Create a NOWPayments invoice for a package."""
-    order_id = f"user_{user_id}_{int(time.time())}_{secrets.token_hex(4)}"
-    
-    payload = {
-        "price_amount": package["price"],
-        "price_currency": "usd",
-        "order_id": order_id,
-        "order_description": f"{package['credits']} credits",
-        "ipn_callback_url": f"{WEBHOOK_BASE_URL}/webhook/payment",
-    }
-    
+async def create_plisio_invoice(user_id, amount_usd, credits, order_number):
+    """Create Plisio payment invoice."""
     try:
+        callback_url = f"{WEBHOOK_BASE_URL}/webhook/plisio?json=true"
+        
+        params = {
+            "source_currency": "USD",
+            "source_amount": amount_usd,
+            "order_name": f"{credits}_credits",
+            "order_number": order_number,
+            "description": f"Purchase {credits} AI image generation credits",
+            "callback_url": callback_url,
+            "allowed_psys_cids": "USDT_TRX,DOGE,BTC,LTC",
+            "email": f"user{user_id}@bot.telegram",
+            "plugin": "TelegramBot",
+            "version": "1.0",
+            "api_key": PLISIO_API_KEY,
+            "expire_min": 60
+        }
+        
+        print_status("📤", f"Creating Plisio invoice for ${amount_usd} ({credits} credits)")
+        
         async with httpx.AsyncClient(timeout=30.0) as client:
-            response = await client.post(
-                f"{NOWPAYMENTS_API_BASE}/invoice",
-                json=payload,
-                headers={
-                    "x-api-key": NOWPAYMENTS_API_KEY,
-                    "Content-Type": "application/json"
-                }
+            response = await client.get(
+                "https://api.plisio.net/api/v1/invoices/new",
+                params=params
             )
             response.raise_for_status()
-            invoice = response.json()
-            
-            # Log transaction
-            await log_transaction(
-                user_id=user_id,
-                order_id=order_id,
-                amount_usd=package["price"],
-                credits=package["credits"],
-                status="pending"
-            )
-            
-            print_status("💳", f"Created invoice {invoice['id']} for user {user_id}")
-            return invoice
-            
+            data = response.json()
+        
+        if data.get("status") == "success":
+            print_status("✅", f"Invoice created: {data['data']['txn_id']}")
+            return {
+                "success": True,
+                "txn_id": data["data"]["txn_id"],
+                "invoice_url": data["data"]["invoice_url"],
+                "invoice_total_sum": data["data"].get("invoice_total_sum")
+            }
+        else:
+            error_msg = data.get("data", {}).get("message", "Unknown error")
+            print_status("❌", f"Plisio error: {error_msg}")
+            return {
+                "success": False,
+                "error": error_msg
+            }
+    
     except Exception as e:
         print_status("❌", f"Failed to create invoice: {e}")
-        return None
+        return {
+            "success": False,
+            "error": str(e)
+        }
 
-def verify_ipn_signature(request_data, signature):
-    """Verify NOWPayments IPN signature."""
-    if not NOWPAYMENTS_IPN_SECRET:
-        print_status("⚠️", "IPN Secret not set - skipping signature verification")
-        return True
+def verify_plisio_callback(data):
+    """Verify Plisio webhook signature.
     
+    With ?json=true in callback URL, Plisio sends JSON and we must verify
+    using the exact JSON serialization they used to generate the signature.
+    """
     try:
-        # Sort request data by keys
-        sorted_data = json.dumps(request_data, sort_keys=True, separators=(',', ':'))
+        if "verify_hash" not in data:
+            print_status("⚠️", "No verify_hash in callback")
+            return False
         
-        # Calculate expected signature
-        expected_sig = hmac.new(
-            NOWPAYMENTS_IPN_SECRET.encode(),
-            sorted_data.encode(),
-            hashlib.sha512
+        received_hash = data["verify_hash"]
+        
+        # Remove verify_hash from data for verification
+        callback_data = {k: v for k, v in data.items() if k != "verify_hash"}
+        
+        # Plisio with json=true uses JSON.stringify on sorted object
+        # We need to match their exact serialization
+        # According to Plisio Node.js example:
+        # const string = JSON.stringify(ordered);
+        # where ordered is the data object without verify_hash
+        
+        # Sort keys and serialize without spaces (compact JSON)
+        json_string = json.dumps(callback_data, separators=(',', ':'), sort_keys=True)
+        
+        # Calculate HMAC-SHA1
+        calculated_hash = hmac.new(
+            PLISIO_API_KEY.encode(),
+            json_string.encode(),
+            hashlib.sha1
         ).hexdigest()
         
-        return hmac.compare_digest(signature, expected_sig)
+        is_valid = calculated_hash == received_hash
+        
+        if not is_valid:
+            print_status("⚠️", f"Signature verification failed")
+            print_status("⚠️", f"Expected: {calculated_hash}")
+            print_status("⚠️", f"Received: {received_hash}")
+            print_status("⚠️", f"Data: {json_string[:200]}")
+            
+            # Try alternative: without sort_keys (natural order)
+            json_string_alt = json.dumps(callback_data, separators=(',', ':'))
+            calculated_hash_alt = hmac.new(
+                PLISIO_API_KEY.encode(),
+                json_string_alt.encode(),
+                hashlib.sha1
+            ).hexdigest()
+            
+            if calculated_hash_alt == received_hash:
+                print_status("✅", "Signature valid with natural key order")
+                return True
+            
+            print_status("⚠️", f"Alternative also failed: {calculated_hash_alt}")
+        
+        return is_valid
+    
     except Exception as e:
-        print_status("❌", f"Signature verification error: {e}")
+        print_status("❌", f"Verification error: {e}")
         return False
 
 # ========== COMFYUI FUNCTIONS ==========
@@ -592,8 +661,8 @@ async def startup():
     init_db()
     print_status("🚀", "Bot started successfully")
     print_status("⚙️", f"Quota system: {'ENABLED' if ENABLE_QUOTA_SYSTEM else 'DISABLED (unlimited testing)'}")
-    print_status("📊", f"Max concurrent generations: {MAX_CONCURRENT_GENERATIONS}")
-    print_status("💳", f"Payments: {'ENABLED' if NOWPAYMENTS_API_KEY else 'DISABLED'}")
+    print_status("💳", f"Plisio integration: {'ENABLED' if PLISIO_API_KEY else 'DISABLED'}")
+    print_status("🔗", f"Webhook URL: {WEBHOOK_BASE_URL}/webhook/plisio")
 
 @app.get("/")
 def health():
@@ -601,9 +670,9 @@ def health():
     return {
         "status": "up",
         "quota_enabled": ENABLE_QUOTA_SYSTEM,
+        "plisio_enabled": bool(PLISIO_API_KEY),
         "active_generations": len(active_generations),
-        "max_concurrent": MAX_CONCURRENT_GENERATIONS,
-        "payments_enabled": bool(NOWPAYMENTS_API_KEY)
+        "webhook_url": f"{WEBHOOK_BASE_URL}/webhook/plisio"
     }
 
 @app.get("/stats")
@@ -620,96 +689,283 @@ def stats():
     cur.execute("SELECT COUNT(*), status FROM generations GROUP BY status")
     gen_stats = dict(cur.fetchall())
     
-    # Get payment stats
+    # Get transaction stats
     cur.execute("SELECT COUNT(*), status FROM transactions GROUP BY status")
-    payment_stats = dict(cur.fetchall())
+    trans_stats = dict(cur.fetchall())
     
     conn.close()
     
     return {
         "users": user_count,
         "generations": gen_stats,
-        "payments": payment_stats,
+        "transactions": trans_stats,
         "active_generations": len(active_generations),
         "quota_enabled": ENABLE_QUOTA_SYSTEM
     }
 
-@app.post("/webhook/payment")
-async def payment_webhook(
-    req: Request,
-    x_nowpayments_sig: str = Header(None)
-):
-    """Handle NOWPayments IPN callbacks."""
+@app.post("/webhook/plisio")
+async def plisio_webhook(req: Request):
+    """Handle Plisio payment callbacks."""
     try:
         data = await req.json()
         
-        print_status("💰", f"Payment webhook received: {json.dumps(data)[:200]}")
+        print_status("💳", f"Plisio callback received")
         
-        # Verify signature
-        if x_nowpayments_sig and not verify_ipn_signature(data, x_nowpayments_sig):
-            print_status("⚠️", "Invalid payment signature!")
-            return {"ok": False, "error": "Invalid signature"}
+        # Verify webhook signature
+        if not verify_plisio_callback(data):
+            print_status("⚠️", "Invalid webhook signature!")
+            return {"status": "error", "message": "Invalid signature"}
         
-        # Extract payment info
-        payment_status = data.get("payment_status")
-        order_id = data.get("order_id")
-        payment_id = data.get("payment_id")
+        # Extract and validate required data
+        order_number = data.get("order_number")
+        status = data.get("status")
         
-        if not order_id:
-            print_status("⚠️", "No order_id in webhook")
-            return {"ok": False, "error": "No order_id"}
+        if not order_number:
+            print_status("⚠️", "Missing order_number in webhook")
+            return {"status": "error", "message": "Missing order_number"}
         
-        # Update transaction
-        await update_transaction(
-            order_id=order_id,
-            payment_id=str(payment_id) if payment_id else None,
-            payment_status=payment_status
-        )
+        if not status:
+            print_status("⚠️", "Missing status in webhook")
+            return {"status": "error", "message": "Missing status"}
         
-        # Handle completed payment
-        if payment_status == "finished":
-            print_status("✅", f"Payment finished for order {order_id}")
+        amount = data.get("amount")
+        currency = data.get("currency")
+        source_amount = data.get("source_amount")
+        
+        print_status("📊", f"Order: {order_number}, Status: {status}")
+        
+        # Handle non-completed statuses
+        if status == "pending":
+            async with db_write_lock:
+                conn = db_connect()
+                try:
+                    cur = conn.cursor()
+                    # Only update if not already completed to avoid overwriting
+                    cur.execute(
+                        "UPDATE transactions SET payment_status='pending' WHERE order_id=? AND status NOT IN ('completed', 'processing')",
+                        (order_number,)
+                    )
+                    updated = cur.rowcount > 0
+                    
+                    cur.execute("SELECT user_id FROM transactions WHERE order_id=?", (order_number,))
+                    row = cur.fetchone()
+                    conn.commit()
+                    
+                    if row and updated:
+                        user_id = row[0]
+                        await send_message(user_id, "⏳ Payment detected! Waiting for blockchain confirmations...")
+                finally:
+                    conn.close()
             
-            # Get transaction details
-            transaction = await get_transaction_by_order_id(order_id)
+            return {"status": "success", "message": "Pending noted"}
+        
+        elif status == "expired":
+            async with db_write_lock:
+                conn = db_connect()
+                try:
+                    cur = conn.cursor()
+                    # Only expire if not already completed
+                    cur.execute(
+                        "UPDATE transactions SET status='expired', completed_at=CURRENT_TIMESTAMP WHERE order_id=? AND status NOT IN ('completed', 'processing')",
+                        (order_number,)
+                    )
+                    updated = cur.rowcount > 0
+                    
+                    cur.execute("SELECT user_id FROM transactions WHERE order_id=?", (order_number,))
+                    row = cur.fetchone()
+                    conn.commit()
+                    
+                    if row and updated:
+                        user_id = row[0]
+                        await send_message(user_id, "⏰ Payment invoice expired. Use /buy to create a new one.")
+                finally:
+                    conn.close()
             
-            if not transaction:
-                print_status("⚠️", f"Transaction not found: {order_id}")
-                return {"ok": False, "error": "Transaction not found"}
+            return {"status": "success", "message": "Expired noted"}
+        
+        elif status in ("cancelled", "error"):
+            async with db_write_lock:
+                conn = db_connect()
+                try:
+                    cur = conn.cursor()
+                    # Only fail if not already completed
+                    cur.execute(
+                        "UPDATE transactions SET status='failed', completed_at=CURRENT_TIMESTAMP WHERE order_id=? AND status NOT IN ('completed', 'processing')",
+                        (order_number,)
+                    )
+                    updated = cur.rowcount > 0
+                    
+                    cur.execute("SELECT user_id FROM transactions WHERE order_id=?", (order_number,))
+                    row = cur.fetchone()
+                    conn.commit()
+                    
+                    if row and updated:
+                        user_id = row[0]
+                        await send_message(user_id, "❌ Payment failed or cancelled. Use /buy to try again.")
+                finally:
+                    conn.close()
             
-            # Check if already processed
-            if transaction["status"] == "completed":
-                print_status("ℹ️", f"Payment already processed: {order_id}")
-                return {"ok": True, "message": "Already processed"}
+            return {"status": "success", "message": "Failed noted"}
+        
+        elif status == "mismatch":
+            async with db_write_lock:
+                conn = db_connect()
+                try:
+                    cur = conn.cursor()
+                    # Only mark mismatch if not already completed
+                    cur.execute(
+                        "UPDATE transactions SET status='mismatch', completed_at=CURRENT_TIMESTAMP WHERE order_id=? AND status NOT IN ('completed', 'processing')",
+                        (order_number,)
+                    )
+                    updated = cur.rowcount > 0
+                    
+                    cur.execute("SELECT user_id FROM transactions WHERE order_id=?", (order_number,))
+                    row = cur.fetchone()
+                    conn.commit()
+                    
+                    if row and updated:
+                        user_id = row[0]
+                        await send_message(user_id, f"⚠️ Payment mismatch detected. Please contact support with order {order_number}")
+                finally:
+                    conn.close()
             
-            # Add credits to user
-            user_id = transaction["user_id"]
-            credits = transaction["credits"]
+            return {"status": "success", "message": "Mismatch noted"}
+        
+        # Only process completed payments from here
+        if status != "completed":
+            print_status("ℹ️", f"Unknown status {status} - ignoring")
+            return {"status": "success", "message": f"Status {status} ignored"}
+        
+        # REQUIRE source_amount for completed payments
+        if not source_amount:
+            print_status("⚠️", f"Missing source_amount for completed payment: {order_number}")
+            return {"status": "error", "message": "Missing source_amount"}
+        
+        # Atomically claim and process completed payment
+        user_id = None
+        new_credits = None
+        credits = None  # Store credits for notification
+        
+        async with db_write_lock:
+            conn = db_connect()
+            try:
+                cur = conn.cursor()
+                
+                # Atomically claim: set status='processing' only if 'pending' or 'new'
+                cur.execute(
+                    "UPDATE transactions SET status='processing' WHERE order_id=? AND status IN ('pending', 'new')",
+                    (order_number,)
+                )
+                claimed = cur.rowcount > 0
+                conn.commit()
+                
+                if not claimed:
+                    print_status("⚠️", f"Transaction already processed: {order_number}")
+                    return {"status": "success", "message": "Already processed"}
+                
+                # Get transaction details
+                cur.execute(
+                    "SELECT user_id, credits, amount_usd FROM transactions WHERE order_id=?",
+                    (order_number,)
+                )
+                row = cur.fetchone()
+                
+                if not row:
+                    print_status("⚠️", f"Transaction not found: {order_number}")
+                    return {"status": "error", "message": "Transaction not found"}
+                
+                user_id, credits, expected_usd = row
+                
+                print_status("✅", f"Claimed transaction for user {user_id}: {credits} credits")
+                
+                # Validate amount
+                try:
+                    paid_usd = float(source_amount)
+                except (ValueError, TypeError):
+                    print_status("⚠️", f"Invalid source_amount: {source_amount}")
+                    cur.execute("UPDATE transactions SET status='pending' WHERE order_id=?", (order_number,))
+                    conn.commit()
+                    return {"status": "error", "message": "Invalid source_amount"}
+                
+                tolerance = expected_usd * 0.02  # 2% tolerance
+                
+                if abs(paid_usd - expected_usd) > tolerance:
+                    print_status("⚠️", f"Amount mismatch: expected ${expected_usd}, got ${paid_usd}")
+                    cur.execute(
+                        "UPDATE transactions SET status='amount_mismatch', completed_at=CURRENT_TIMESTAMP WHERE order_id=?",
+                        (order_number,)
+                    )
+                    conn.commit()
+                    
+                    await send_message(
+                        user_id,
+                        f"⚠️ Payment amount mismatch. Expected ${expected_usd:.2f}, received ${paid_usd:.2f}. Contact support with order {order_number}"
+                    )
+                    return {"status": "error", "message": "Amount mismatch"}
+                
+                # Get or create user
+                cur.execute("SELECT credits FROM users WHERE user_id=?", (user_id,))
+                user_row = cur.fetchone()
+                
+                if not user_row:
+                    cur.execute(
+                        "INSERT INTO users (user_id, credits, free_used, last_reset) VALUES (?, 0, 0, ?)",
+                        (user_id, datetime.date.today().isoformat())
+                    )
+                    current_credits = 0
+                else:
+                    current_credits = user_row[0]
+                
+                new_credits = current_credits + credits
+                
+                # Credit user
+                cur.execute("UPDATE users SET credits=? WHERE user_id=?", (new_credits, user_id))
+                
+                # Mark transaction completed
+                cur.execute(
+                    "UPDATE transactions SET status='completed', payment_status=?, payment_currency=?, payment_amount=?, completed_at=CURRENT_TIMESTAMP WHERE order_id=?",
+                    (status, currency, amount, order_number)
+                )
+                
+                conn.commit()
+                
+                print_status("✅", f"Credited {credits} to user {user_id}, new balance: {new_credits}")
             
-            await add_credits(user_id, credits)
-            await update_transaction(order_id, status="completed", completed=True)
+            except Exception as e:
+                print_status("❌", f"Error processing payment: {e}")
+                # Rollback to pending if we claimed it
+                try:
+                    if 'cur' in locals():
+                        cur.execute("UPDATE transactions SET status='pending' WHERE order_id=?", (order_number,))
+                        conn.commit()
+                except:
+                    pass
+                raise
             
-            # Notify user
+            finally:
+                conn.close()
+        
+        # Notify user OUTSIDE lock
+        if user_id and new_credits is not None:
             await send_message(
                 chat_id=user_id,
                 text=(
                     f"✅ **Payment Received!**\n\n"
-                    f"💰 {credits} credits have been added to your account.\n\n"
-                    f"Use /balance to check your balance.\n"
-                    f"Use /generate to create images!"
+                    f"Amount: {amount} {currency}\n"
+                    f"Credits added: **{credits}**\n"
+                    f"New balance: **{new_credits} credits**\n\n"
+                    f"Thank you! Start generating with /generate"
                 ),
                 parse_mode="Markdown"
             )
-            
-            print_status("💰", f"Credited {credits} credits to user {user_id}")
         
-        return {"ok": True}
-        
+        return {"status": "success"}
+    
     except Exception as e:
-        print_status("❌", f"Payment webhook error: {e}")
+        print_status("❌", f"Plisio webhook error: {e}")
         import traceback
         traceback.print_exc()
-        return {"ok": False, "error": str(e)}
+        return {"status": "error", "message": str(e)}
 
 @app.post("/webhook")
 async def webhook(req: Request):
@@ -717,6 +973,74 @@ async def webhook(req: Request):
     try:
         update = await req.json()
         
+        # Handle callback queries (button presses)
+        if "callback_query" in update:
+            callback_query = update["callback_query"]
+            callback_data = callback_query.get("data", "")
+            chat_id = callback_query["message"]["chat"]["id"]
+            callback_query_id = callback_query["id"]
+            
+            print_status("🔘", f"Callback from {chat_id}: {callback_data}")
+            
+            # Handle package selection
+            if callback_data.startswith("buy_"):
+                package_id = int(callback_data.split("_")[1])
+                package = next((p for p in PAYMENT_PACKAGES if p["id"] == package_id), None)
+                
+                if not package:
+                    await answer_callback_query(callback_query_id, "Invalid package", show_alert=True)
+                    return {"ok": True}
+                
+                # Generate unique order number with microseconds to prevent collisions
+                order_number = f"ORDER_{chat_id}_{int(time.time() * 1000)}"
+                
+                # Create Plisio invoice
+                await answer_callback_query(callback_query_id, "Creating invoice...")
+                
+                invoice = await create_plisio_invoice(
+                    user_id=chat_id,
+                    amount_usd=package["price"],
+                    credits=package["credits"],
+                    order_number=order_number
+                )
+                
+                if invoice["success"]:
+                    # Log transaction
+                    await log_transaction(
+                        user_id=chat_id,
+                        order_id=order_number,
+                        amount_usd=package["price"],
+                        credits=package["credits"],
+                        txn_id=invoice["txn_id"]
+                    )
+                    
+                    # Send payment link to user
+                    await send_message(
+                        chat_id=chat_id,
+                        text=(
+                            f"💳 **Payment Invoice Created**\n\n"
+                            f"Package: **{package['credits']} credits**\n"
+                            f"Price: **${package['price']} USD**\n\n"
+                            f"Payment options:\n"
+                            f"• USDT (TRC-20) - Low fees ~$1\n"
+                            f"• Dogecoin - Very low fees\n"
+                            f"• Bitcoin\n"
+                            f"• Litecoin\n\n"
+                            f"👉 [Click here to pay]({invoice['invoice_url']})\n\n"
+                            f"⏰ Invoice expires in 60 minutes\n"
+                            f"🔔 You'll be notified when payment is received"
+                        ),
+                        parse_mode="Markdown"
+                    )
+                else:
+                    await send_message(
+                        chat_id=chat_id,
+                        text=f"❌ Failed to create invoice: {invoice.get('error', 'Unknown error')}"
+                    )
+            
+            return {"ok": True}
+        
+        # Handle regular messages
         if "message" not in update:
             return {"ok": True}
         
@@ -761,65 +1085,6 @@ async def webhook(req: Request):
                 parse_mode="Markdown"
             )
         
-        elif text == "/buy":
-            if not NOWPAYMENTS_API_KEY:
-                await send_message(
-                    chat_id=chat_id,
-                    text="❌ Payments are currently disabled. Contact admin."
-                )
-                return {"ok": True}
-            
-            # Show payment packages
-            packages_text = "💳 **Purchase Credits**\n\nChoose a package:\n\n"
-            
-            for i, pkg in enumerate(PAYMENT_PACKAGES, 1):
-                badge = f" {pkg.get('badge', '')}" if pkg.get('badge') else ""
-                packages_text += f"{i}. {pkg['label']}{badge}\n"
-            
-            packages_text += "\n💡 Reply with the package number (1-4) to proceed."
-            
-            await send_message(
-                chat_id=chat_id,
-                text=packages_text,
-                parse_mode="Markdown"
-            )
-        
-        elif text in ["1", "2", "3", "4"]:
-            # Handle package selection
-            try:
-                package_index = int(text) - 1
-                if 0 <= package_index < len(PAYMENT_PACKAGES):
-                    package = PAYMENT_PACKAGES[package_index]
-                    
-                    await send_message(
-                        chat_id=chat_id,
-                        text=f"⏳ Creating payment for {package['credits']} credits (${package['price']})..."
-                    )
-                    
-                    # Create invoice
-                    invoice = await create_payment_invoice(chat_id, package)
-                    
-                    if invoice:
-                        await send_message(
-                            chat_id=chat_id,
-                            text=(
-                                f"✅ **Payment Link Ready!**\n\n"
-                                f"Package: {package['credits']} credits\n"
-                                f"Price: ${package['price']} USD\n\n"
-                                f"👉 [Click here to pay]({invoice['invoice_url']})\n\n"
-                                f"Accepts: BTC, ETH, USDT, and 200+ cryptocurrencies\n\n"
-                                f"💡 You'll receive your credits automatically after payment!"
-                            ),
-                            parse_mode="Markdown"
-                        )
-                    else:
-                        await send_message(
-                            chat_id=chat_id,
-                            text="❌ Failed to create payment. Please try again or contact support."
-                        )
-            except ValueError:
-                pass
-        
         elif text == "/balance":
             credits, free_used = await get_user(chat_id)
             free_remaining = max(0, FREE_GENERATIONS_PER_DAY - free_used)
@@ -828,21 +1093,60 @@ async def webhook(req: Request):
                 balance_text = (
                     f"💳 **Your Balance:**\n\n"
                     f"Free generations today: {free_remaining}/{FREE_GENERATIONS_PER_DAY}\n"
-                    f"Credits: {credits}\n\n"
-                    f"Use /buy to purchase more credits!"
+                    f"Credits: **{credits}**\n\n"
+                    f"Purchase more: /buy"
                 )
             else:
                 balance_text = (
                     f"💳 **Testing Mode Active:**\n\n"
                     f"Unlimited generations available!\n"
                     f"Credits: {credits}\n"
-                    f"Total generated: {free_used}"
+                    f"Total generated: {free_used}\n\n"
+                    f"You can still test /buy command"
                 )
             
             await send_message(
                 chat_id=chat_id,
                 text=balance_text,
                 parse_mode="Markdown"
+            )
+        
+        elif text == "/buy":
+            # Check if payments are enabled
+            if not PLISIO_API_KEY:
+                await send_message(
+                    chat_id=chat_id,
+                    text=(
+                        "❌ **Payments Currently Disabled**\n\n"
+                        "Crypto payments are not configured.\n"
+                        "Please contact support for assistance."
+                    ),
+                    parse_mode="Markdown"
+                )
+                return {"ok": True}
+            
+            # Show payment packages
+            keyboard = {
+                "inline_keyboard": [
+                    [{"text": pkg["label"], "callback_data": f"buy_{pkg['id']}"}]
+                    for pkg in PAYMENT_PACKAGES
+                ]
+            }
+            
+            await send_message(
+                chat_id=chat_id,
+                text=(
+                    "💳 **Purchase Credits**\n\n"
+                    "Select a package below:\n\n"
+                    "Payment accepted in:\n"
+                    "• USDT (TRC-20) - Recommended\n"
+                    "• Dogecoin - Best for small amounts\n"
+                    "• Bitcoin\n"
+                    "• Litecoin\n\n"
+                    "Secure crypto payments via Plisio"
+                ),
+                parse_mode="Markdown",
+                reply_markup=keyboard
             )
         
         elif text == "/examples":
@@ -870,8 +1174,7 @@ async def webhook(req: Request):
                     "• No illegal or harmful content\n"
                     "• Abuse will result in permanent ban\n"
                     "• Generated images are for personal use\n"
-                    "• We reserve the right to refuse service\n"
-                    "• All sales are final"
+                    "• We reserve the right to refuse service"
                 ),
                 parse_mode="Markdown"
             )
@@ -891,14 +1194,6 @@ async def webhook(req: Request):
                 await send_message(
                     chat_id=chat_id,
                     text="⏳ You already have a generation in progress. Please wait for it to complete."
-                )
-                return {"ok": True}
-            
-            # Check concurrent limit
-            if len(active_generations) >= MAX_CONCURRENT_GENERATIONS:
-                await send_message(
-                    chat_id=chat_id,
-                    text=f"⏳ Server is busy ({len(active_generations)}/{MAX_CONCURRENT_GENERATIONS} active). Please try again in a moment."
                 )
                 return {"ok": True}
             
@@ -924,8 +1219,9 @@ async def webhook(req: Request):
                         chat_id=chat_id,
                         text=(
                             "❌ **No generations available**\n\n"
-                            f"You've used your {FREE_GENERATIONS_PER_DAY} free generations today.\n"
-                            "Use /buy to purchase credits and continue generating!"
+                            f"You've used your {FREE_GENERATIONS_PER_DAY} free generations today "
+                            f"and have no credits.\n\n"
+                            "Purchase credits: /buy"
                         ),
                         parse_mode="Markdown"
                     )
@@ -982,16 +1278,18 @@ if __name__ == "__main__":
         print_status("❌", "WORKFLOW_PATH not set!")
         exit(1)
     
+    if not PLISIO_API_KEY:
+        print_status("⚠️", "PLISIO_API_KEY not set - payments disabled!")
+    
     print("\n" + "="*60)
-    print("🚀 STARTING BULLETPROOF BOT WITH PAYMENTS")
+    print("🚀 STARTING BOT WITH PLISIO INTEGRATION")
     print("="*60)
     print(f"Telegram Token: {'SET' if TOKEN else 'MISSING'}")
     print(f"RunPod API Key: {'SET' if API_KEY else 'MISSING'}")
     print(f"Endpoint ID: {ENDPOINT_ID}")
-    print(f"Workflow Path: {WORKFLOW_PATH}")
+    print(f"Plisio API Key: {'SET' if PLISIO_API_KEY else 'MISSING'}")
+    print(f"Webhook URL: {WEBHOOK_BASE_URL}/webhook/plisio")
     print(f"Quota System: {'ENABLED' if ENABLE_QUOTA_SYSTEM else 'DISABLED'}")
-    print(f"NOWPayments: {'ENABLED' if NOWPAYMENTS_API_KEY else 'DISABLED'}")
-    print(f"Webhook URL: {WEBHOOK_BASE_URL}")
     
     if WORKFLOW_PATH and os.path.exists(WORKFLOW_PATH):
         print(f"✅ Workflow file found")
