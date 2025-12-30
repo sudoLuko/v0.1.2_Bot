@@ -23,7 +23,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # ========== FEATURE FLAGS ==========
-ENABLE_QUOTA_SYSTEM = True  # Set to True for production with paid credits
+ENABLE_QUOTA_SYSTEM = False  # Set to True for production with paid credits
 FREE_GENERATIONS_PER_DAY = 2  # Only applies if ENABLE_QUOTA_SYSTEM is True
 
 # ========== CONFIGURATION ==========
@@ -41,11 +41,10 @@ WEBHOOK_BASE_URL = os.getenv("WEBHOOK_BASE_URL", "https://svthbzs7s6ioem-8000.pr
 
 # Payment Packages
 PAYMENT_PACKAGES = [
-    {"id": 1, "credits": 5, "price": 3, "label": "5 credits - $3"},
-    {"id": 2, "credits": 10, "price": 6, "label": "10 credits - $6 ⭐ POPULAR"},
-    {"id": 3, "credits": 15, "price": 8, "label": "15 credits - $8 💎 BEST VALUE"},
-    {"id": 4, "credits": 20, "price": 10, "label": "20 credits - $10"},
-    {"id": 5, "credits": 100, "price": 35, "label": "100 credits - $35"},
+    {"id": 1, "credits": 10, "price": 10, "label": "10 credits - $10"},
+    {"id": 2, "credits": 25, "price": 20, "label": "25 credits - $20 ⭐ POPULAR"},
+    {"id": 3, "credits": 50, "price": 35, "label": "50 credits - $35 💎 BEST VALUE"},
+    {"id": 4, "credits": 100, "price": 60, "label": "100 credits - $60"},
 ]
 
 # Generation settings
@@ -388,6 +387,7 @@ async def create_plisio_invoice(user_id, amount_usd, credits, order_number):
     """Create Plisio payment invoice."""
     try:
         callback_url = f"{WEBHOOK_BASE_URL}/webhook/plisio?json=true"
+        success_url = f"{WEBHOOK_BASE_URL}/payment/success"
         
         params = {
             "source_currency": "USD",
@@ -396,7 +396,9 @@ async def create_plisio_invoice(user_id, amount_usd, credits, order_number):
             "order_number": order_number,
             "description": f"Purchase {credits} AI image generation credits",
             "callback_url": callback_url,
-            "allowed_psys_cids": "DOGE",  # Lowest fees, widely available
+            "success_url": success_url,
+            "fail_url": success_url,  # Same page, just says "return to bot"
+            "allowed_psys_cids": "BTC,DOGE",  # BTC = universal, DOGE = cheap for advanced users
             "email": f"user{user_id}@bot.telegram",
             "plugin": "TelegramBot",
             "version": "1.0",
@@ -968,7 +970,84 @@ async def plisio_webhook(req: Request):
         traceback.print_exc()
         return {"status": "error", "message": str(e)}
 
+@app.get("/payment/success")
+async def payment_success(req: Request):
+    """Success page after Plisio payment - redirects to Telegram bot."""
+    html = """
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <title>Payment Successful</title>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <style>
+            body {
+                font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+                display: flex;
+                justify-content: center;
+                align-items: center;
+                min-height: 100vh;
+                margin: 0;
+                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            }
+            .container {
+                background: white;
+                padding: 40px;
+                border-radius: 20px;
+                box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+                text-align: center;
+                max-width: 400px;
+            }
+            .checkmark {
+                width: 80px;
+                height: 80px;
+                border-radius: 50%;
+                background: #4CAF50;
+                margin: 0 auto 20px;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                font-size: 48px;
+                color: white;
+            }
+            h1 {
+                color: #333;
+                margin: 0 0 10px;
+            }
+            p {
+                color: #666;
+                margin: 0 0 30px;
+            }
+            .button {
+                display: inline-block;
+                background: #667eea;
+                color: white;
+                padding: 15px 30px;
+                border-radius: 10px;
+                text-decoration: none;
+                font-weight: 600;
+                transition: background 0.3s;
+            }
+            .button:hover {
+                background: #5568d3;
+            }
+        </style>
+    </head>
+    <body>
+        <div class="container">
+            <div class="checkmark">✓</div>
+            <h1>Payment Successful!</h1>
+            <p>Your credits will be added automatically.<br>Return to Telegram to start generating.</p>
+            <a href="https://t.me/ofgirlbot" class="button">Back to Bot</a>
+        </div>
+    </body>
+    </html>
+    """
+    from fastapi.responses import HTMLResponse
+    return HTMLResponse(content=html)
+
 @app.post("/webhook")
+
 async def webhook(req: Request):
     """Handle Telegram webhook updates."""
     try:
@@ -1139,14 +1218,13 @@ async def webhook(req: Request):
                 text=(
                     "💳 **Purchase Credits**\n\n"
                     "Select a package below:\n\n"
-                    "🐕 **Payment Method: Dogecoin (DOGE)**\n"
-                    "• Transaction fee: ~$0.10\n"
-                    "• Fast confirmation (1 min)\n"
-                    "• Available on Coinbase, Robinhood, Binance\n\n"
-                    "Don't have DOGE? Buy instantly on:\n"
-                    "• Coinbase.com\n"
-                    "• Robinhood.com\n"
-                    "• Binance.com\n\n"
+                    "**Payment Options:**\n"
+                    "₿ **Bitcoin (BTC)** - Recommended\n"
+                    "   • Fee: ~$3 | Time: 10-30 min\n"
+                    "   • Works everywhere (Coinbase, Cash App)\n\n"
+                    "🐕 **Dogecoin (DOGE)** - Cheapest\n"
+                    "   • Fee: ~$0.10 | Time: 2-6 min\n"
+                    "   • ⚠️ Use Coinbase.com, NOT Coinbase Wallet\n\n"
                     "Secure payments via Plisio 🔒"
                 ),
                 parse_mode="Markdown",
