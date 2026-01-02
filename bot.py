@@ -588,7 +588,7 @@ async def generate_and_send(chat_id, prompt, generation_id):
         # Notify start
         await send_message(
             chat_id=chat_id,
-            text="🎨 Generating your image..."
+            text="🤑 Generating your image..."
         )
         
         # Load and prepare workflow
