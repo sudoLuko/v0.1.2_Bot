@@ -1,6 +1,6 @@
 PRIVACY POLICY & TERMS OF SERVICE
 
-Effective Date: December 30, 2024
+Effective Date: December 30, 2025
 Last Updated: December 30, 2025
 
 ⚠️ IMPORTANT NOTICES ⚠️
