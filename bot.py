@@ -1137,9 +1137,9 @@ async def webhook(req: Request):
                 chat_id=chat_id,
                 text=(
                     "🥰 **Welcome to OF Girl Gen!** (18+ Only) 🥰\n\n"
-                    f"{quota_msg}\n\n"
                     "I'm your private NSFW image generator powered by SDXL. "
                     "I create high-quality, realistic erotic portraits and scenes of stunning women — just describe your fantasy in detail!\n\n"
+                    f"{quota_msg}\n\n"
                     "😍 **Commands:**\n"
                     "• /generate <prompt> — Create an image from your prompt\n"
                     "• /examples — Get ready-to-use NSFW prompt examples\n"
