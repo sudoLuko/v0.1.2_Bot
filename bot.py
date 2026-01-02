@@ -1282,7 +1282,7 @@ async def webhook(req: Request):
                 text=(
                     "🔒 **Privacy Policy**\n\n"
                     "View our privacy policy here:\n"
-                    "[Privacy Policy]https://pastebin.com/me1G5xCE\n\n"
+                    "https://pastebin.com/me1G5xCE\n\n"
             ),
             parse_mode="Markdown"
         )
