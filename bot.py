@@ -1136,14 +1136,21 @@ async def webhook(req: Request):
             await send_message(
                 chat_id=chat_id,
                 text=(
-                    "🎨 Welcome to the AI Image Generator Bot!\n\n"
-                    f"{quota_msg}"
-                    "Commands:\n"
-                    "• /generate <prompt> - Create an image\n"
-                    "• /buy - Purchase credits\n"
-                    "• /balance - Check your credits\n"
-                    "• /examples - See prompt examples\n"
-                    "• /help - Show all commands"
+                    "🥰 **Welcome to OF Girl Gen!** (18+ Only) 🥰\n\n"
+                    f"{quota_msg}\n\n"
+                    "I'm your private NSFW image generator powered by SDXL. "
+                    "I create high-quality, realistic erotic portraits and scenes of stunning women — just describe your fantasy in detail!\n\n"
+                    "😍 **Commands:**\n"
+                    "• /generate <prompt> — Create an image from your prompt\n"
+                    "• /examples — Get ready-to-use NSFW prompt examples\n"
+                    "• /balance — Check your remaining credits\n"
+                    "• /buy — Purchase more credits\n"
+                    "• /terms — View terms of service\n"
+                    "• /privacy — View privacy policy\n"
+                    "• /help — Show this message again\n\n"
+                    "🔥 **Quick Tip:** The more detailed your prompt, the hotter the result! "
+                    "Describe her appearance, pose, lighting, and setting.\n\n"
+                    "🚀 Ready? Try /examples first or send /generate followed by your prompt!"
                 ),
                 parse_mode="Markdown"
             )
@@ -1158,6 +1165,7 @@ async def webhook(req: Request):
                     "/balance - Check credits & usage\n"
                     "/examples - Prompt ideas\n"
                     "/terms - Terms of service\n"
+                    "/privacy - Privacy policy\n"
                     "/help - Show this message"
                 ),
                 parse_mode="Markdown"
@@ -1238,7 +1246,7 @@ async def webhook(req: Request):
             await send_message(
                 chat_id=chat_id,
                 text=(
-                    "💡 **NSFW Prompt Examples (18+ Only)**\n\n"
+                    "🔥 **NSFW Prompt Examples (18+ Only)**\n\n"
                     "• Beautiful young woman with long blonde hair, fully nude, lying on silk sheets in a dimly lit luxurious bedroom, soft warm window light caressing her body, intimate and sensual pose, detailed skin texture, shallow depth of field, photorealistic, shot on 85mm f/1.4 lens, highly detailed anatomy, erotic photography, 8k\n\n"
                     "• Stunning tattooed Latina model, completely nude, intricate body tattoos, standing in dramatic cinematic low-key lighting, dark studio background, confident and seductive gaze, perfect physique, oiled skin highlights, professional erotic fashion photography, hyperrealistic, sharp focus, masterpiece\n\n"
                     "• Elegant Asian woman wearing sheer black lace lingerie that reveals everything, soft diffused bedroom lighting with subtle rim light, graceful teasing pose on a velvet chaise lounge, intricate lace details, aroused expression, photorealistic skin and fabric, shot with 50mm f/1.2 lens, high-end boudoir photography, 8k UHD\n\n"
@@ -1267,6 +1275,17 @@ async def webhook(req: Request):
                 ),
                 parse_mode="Markdown"
             )
+        
+        elif text == "/privacy":
+            await send_message(
+            chat_id=chat_id,
+                text=(
+                    "🔒 **Privacy Policy**\n\n"
+                    "View our privacy policy here:\n"
+                    "[Privacy Policy]https://pastebin.com/me1G5xCE\n\n"
+            ),
+            parse_mode="Markdown"
+        )
         
         elif text.startswith("/generate"):
             prompt = text.replace("/generate", "").strip()
