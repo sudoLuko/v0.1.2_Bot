@@ -38,6 +38,7 @@ WORKFLOW_PATH = os.getenv("WORKFLOW_PATH")
 # Plisio Configuration
 PLISIO_API_KEY = os.getenv("PLISIO_API_KEY")
 WEBHOOK_BASE_URL = os.getenv("WEBHOOK_BASE_URL", "https://svthbzs7s6ioem-8000.proxy.runpod.net")
+FRONTEND_BASE_URL = "https://of-girlbot.pages.dev"  # User-facing payment pages
 
 # Payment Packages
 PAYMENT_PACKAGES = [
@@ -388,7 +389,8 @@ async def create_plisio_invoice(user_id, amount_usd, credits, order_number):
     """Create Plisio payment invoice."""
     try:
         callback_url = f"{WEBHOOK_BASE_URL}/webhook/plisio?json=true"
-        success_url = f"{WEBHOOK_BASE_URL}/payment/success"
+        success_url = f"{FRONTEND_BASE_URL}/success.html"
+        fail_url = f"{FRONTEND_BASE_URL}/fail.html"
         
         params = {
             "source_currency": "USD",
@@ -398,7 +400,7 @@ async def create_plisio_invoice(user_id, amount_usd, credits, order_number):
             "description": f"Purchase {credits} AI image generation credits",
             "callback_url": callback_url,
             "success_url": success_url,
-            "fail_url": success_url,  # Same page, just says "return to bot"
+            "fail_url": fail_url,
             "allowed_psys_cids": "DOGE",  # DOGE only - cheapest fees
             "email": f"user{user_id}@bot.telegram",
             "plugin": "TelegramBot",
