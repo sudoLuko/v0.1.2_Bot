@@ -612,7 +612,7 @@ async def generate_and_send(chat_id, prompt, generation_id):
         # Update user
         await send_message(
             chat_id=chat_id,
-            text=f"⏳ Job ID: `{job_id}`\nPolling for completion...",
+            text=f"⏳ Job ID: `{job_id}`",
             parse_mode="Markdown"
         )
         
