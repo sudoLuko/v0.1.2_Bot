@@ -588,7 +588,7 @@ async def generate_and_send(chat_id, prompt, generation_id):
         # Notify start
         await send_message(
             chat_id=chat_id,
-            text="🎨 Generating your image...\n⏱️ Most take 20-30 seconds; some may take up to 5 minutes"
+            text="🎨 Generating your image..."
         )
         
         # Load and prepare workflow
@@ -1238,13 +1238,17 @@ async def webhook(req: Request):
             await send_message(
                 chat_id=chat_id,
                 text=(
-                    "💡 **Prompt Examples:**\n\n"
-                    "• Beautiful woman, blonde hair, soft lighting, bedroom, candid photo\n"
-                    "• Latina model, tattooed, cinematic lighting, professional photography\n"
-                    "• Asian woman, elegant dress, studio lighting, fashion photography\n"
-                    "• Redhead girl, freckles, natural light, outdoor portrait\n"
-                    "• Athletic woman, gym setting, dynamic pose, fitness photography\n\n"
-                    "Tips: Be descriptive about lighting, setting, and style!"
+                    "💡 **NSFW Prompt Examples (18+ Only)**\n\n"
+                    "• Beautiful young woman with long blonde hair, fully nude, lying on silk sheets in a dimly lit luxurious bedroom, soft warm window light caressing her body, intimate and sensual pose, detailed skin texture, shallow depth of field, photorealistic, shot on 85mm f/1.4 lens, highly detailed anatomy, erotic photography, 8k\n\n"
+                    "• Stunning tattooed Latina model, completely nude, intricate body tattoos, standing in dramatic cinematic low-key lighting, dark studio background, confident and seductive gaze, perfect physique, oiled skin highlights, professional erotic fashion photography, hyperrealistic, sharp focus, masterpiece\n\n"
+                    "• Elegant Asian woman wearing sheer black lace lingerie that reveals everything, soft diffused bedroom lighting with subtle rim light, graceful teasing pose on a velvet chaise lounge, intricate lace details, aroused expression, photorealistic skin and fabric, shot with 50mm f/1.2 lens, high-end boudoir photography, 8k UHD\n\n"
+                    "• Curvy redhead woman with freckles, topless in golden hour sunlight outdoors, natural forest setting, light breeze, sensual hands covering breasts playfully, detailed freckled skin, warm tones, bokeh background, erotic outdoor portrait, highly detailed, photorealistic\n\n"
+                    "• Athletic nude woman with toned abs and muscles, sweaty glistening skin after workout, dynamic pose in modern gym with dramatic side lighting, erotic fitness aesthetic, intense seductive look, ultra-detailed anatomy, professional nude sports photography, 8k\n\n"
+                    "🔥 **NSFW Pro Tips:**\n"
+                    "- Use words like 'nude', 'fully naked', 'sheer lingerie', 'oiled skin', 'aroused', 'sensual pose'\n"
+                    "- Lighting matters: 'soft warm light', 'dramatic low-key', 'golden hour glow', 'rim lighting'\n"
+                    "- Add realism: 'detailed anatomy', 'perfect physique', 'glistening skin', '85mm f/1.4', 'photorealistic'\n"
+                    "- Boost quality: 'hyperrealistic, highly detailed, sharp focus, erotic masterpiece, 8k'"
                 ),
                 parse_mode="Markdown"
             )
