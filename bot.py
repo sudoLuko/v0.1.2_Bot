@@ -43,9 +43,9 @@ WEBHOOK_BASE_URL = os.getenv("WEBHOOK_BASE_URL", "https://svthbzs7s6ioem-8000.pr
 PAYMENT_PACKAGES = [
     {"id": 1, "credits": 5, "price": 3, "label": "5 credits - $3"},
     {"id": 2, "credits": 10, "price": 6, "label": "10 credits - $6 ⭐ POPULAR"},
-    {"id": 3, "credits": 15, "price": 8, "label": "15 credits - $8 💎 BEST VALUE"},
+    {"id": 3, "credits": 15, "price": 8, "label": "15 credits - $8"},
     {"id": 4, "credits": 20, "price": 10, "label": "20 credits - $10"},
-    {"id": 5, "credits": 100, "price": 35, "label": "100 credits - $35"},
+    {"id": 5, "credits": 100, "price": 35, "label": "100 credits - $35 💎 BEST VALUE"},
 ]
 
 # Generation settings
