@@ -1131,7 +1131,7 @@ async def webhook(req: Request):
         # ========== COMMAND HANDLERS ==========
         
         if text == "/start":
-            quota_msg = f"You get **{FREE_GENERATIONS_PER_DAY} free generations** per day.\nAfter that, you'll need credits. 🪙🪙🪙\n\n" if ENABLE_QUOTA_SYSTEM else "**Testing mode: Unlimited generations!**\n\n"
+            quota_msg = f"You get **{FREE_GENERATIONS_PER_DAY} free generations** per day.\nAfter that, you'll need credits. 🤑\n\n" if ENABLE_QUOTA_SYSTEM else "**Testing mode: Unlimited generations!**\n\n"
             
             await send_message(
                 chat_id=chat_id,
