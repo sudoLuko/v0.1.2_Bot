@@ -38,7 +38,7 @@ WORKFLOW_PATH = os.getenv("WORKFLOW_PATH")
 # Plisio Configuration
 PLISIO_API_KEY = os.getenv("PLISIO_API_KEY")
 WEBHOOK_BASE_URL = os.getenv("WEBHOOK_BASE_URL", "https://svthbzs7s6ioem-8000.proxy.runpod.net")
-FRONTEND_BASE_URL = "https://of-girlbot.pages.dev"  # User-facing payment pages
+FRONTEND_BASE_URL = "https://irldream-gen.pages.dev"  # User-facing payment pages
 
 # Payment Packages
 PAYMENT_PACKAGES = [
@@ -1041,7 +1041,7 @@ async def payment_success(req: Request):
             <div class="checkmark">✓</div>
             <h1>Payment Successful!</h1>
             <p>Your credits will be added automatically.<br>Return to Telegram to start generating.</p>
-            <a href="https://t.me/ofgirlbot" class="button">Back to Bot</a>
+            <a href="https://t.me/irldreambot" class="button">Back to Bot</a>
         </div>
     </body>
     </html>
@@ -1138,7 +1138,7 @@ async def webhook(req: Request):
             await send_message(
                 chat_id=chat_id,
                 text=(
-                    "🥰 **Welcome to OF Girl Gen!** (18+ Only) 🥰\n\n"
+                    "🥰 **Welcome to IRLDream Gen!** (18+ Only) 🥰\n\n"
                     "I'm your private NSFW image generator powered by SDXL. "
                     "I create high-quality, realistic erotic portraits and scenes of stunning women — just describe your fantasy in detail!\n\n"
                     f"{quota_msg}\n"
