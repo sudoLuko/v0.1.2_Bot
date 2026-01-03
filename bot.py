@@ -55,7 +55,7 @@ MAX_POLL_TIME = 420  # 7 minutes max wait
 MAX_CONCURRENT_GENERATIONS = 1  # Limit per-user concurrent generations
 
 # Database
-DB = "users.db"
+DB = os.getenv("DB_PATH", "/workspace/users.db")
 
 # FastAPI app
 app = FastAPI()
@@ -146,6 +146,7 @@ async def answer_callback_query(callback_query_id, text=None, show_alert=False):
 
 def db_connect():
     """Create a SQLite connection with basic concurrency settings."""
+    Path(DB).parent.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(DB, timeout=30)
     cur = conn.cursor()
     cur.execute("PRAGMA journal_mode=WAL")
@@ -1138,7 +1139,7 @@ async def webhook(req: Request):
             await send_message(
                 chat_id=chat_id,
                 text=(
-                    "🥰 **Welcome to IRLDream Gen!** (18+ Only) 🥰\n\n"
+                    "🥰 **Welcome to IRLDream Gen!** (18+ Only)\n\n"
                     "I'm your private NSFW image generator powered by SDXL. "
                     "I create high-quality, realistic erotic portraits and scenes of stunning women — just describe your fantasy in detail!\n\n"
                     f"{quota_msg}\n"
@@ -1230,13 +1231,13 @@ async def webhook(req: Request):
                     "• Transaction fee: ~$0.10\n"
                     "• Confirmation time: 2-6 minutes\n\n"
                     "**📱 How to Pay:**\n"
-                    "1. Scan QR code with your wallet\n"
+                    "1. Scan QR code with your wallet (Coinbase especially)\n"
                     "2. Wallet fills in address automatically\n"
                     "3. Enter the DOGE amount shown\n"
                     "4. Send payment\n\n"
                     "**Best Wallets:**\n"
-                    "• Coinbase exchange\n"
-                    "• Trust Wallet\n"
+                    "• Coinbase exchange (Scan QR code)\n"
+                    "• Trust Wallet (Scan or enter address)\n"
                     "• Exodus\n\n"
                     "⚡ Credits added in 2-6 minutes"
                 ),
